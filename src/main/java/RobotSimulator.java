@@ -72,7 +72,6 @@ public class RobotSimulator {
             List<String> commands =  reader.lines().collect(Collectors.toList()); // Process line
             for(int commandIndex=0; commandIndex < commands.size(); commandIndex++) {
                 Command mainCommand = null;
-                String commandArgs = null;
                 String[] commandArgsArray = null;
 
                 String[] commandTokens = commands.get(commandIndex).split(" ");
@@ -82,75 +81,20 @@ public class RobotSimulator {
                     continue;
                 }
                 if (commandTokens.length > 1) {
-                    commandArgs = commandTokens[1];
-                    commandArgsArray = commandArgs.split(",");
+                    commandArgsArray = commandTokens[1].split(",");
                 }
-
-                int inputXCoordinate = this.xCoordinate, inputYCoordinate = this.yCoordinate;
-                Direction inputDirection = null;
 
                 switch(mainCommand) {
                     case DEPLOY:
-                        try {
-                            inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
-                            inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
-                            inputDirection = Direction.valueOf(commandArgsArray[2]);
-                        } catch (IllegalArgumentException e) {
-                            continue;
-                        }
-
-                        //Validations
-                        if (isInvalidMove(outputs, inputXCoordinate, inputYCoordinate)) continue;
-
-                        //Commit the Command
-                        this.xCoordinate = inputXCoordinate;
-                        this.yCoordinate = inputYCoordinate;
-                        this.directionIndex = Arrays.asList(DIRECTION_SEQUENCE).indexOf(inputDirection);
-                        this.isActivated = true;
+                        boolean shouldSkipDeploy = deploy(outputs, commandArgsArray);
+                        if (shouldSkipDeploy) continue;
 
                         break;
                     case PIT:
                         if (!isActivated) continue;
 
-                        //Make sure this PIT follows a DEPLOY and allows only PIT in intermediate steps
-                        boolean shouldSkipThisPit = false;
-                        int tmpIndex = commandIndex;
-                        String previousCommand = null;
-                        while (tmpIndex >= 0){
-                            previousCommand = commands.get((tmpIndex - 1) % commands.size());
-                            if (previousCommand.startsWith(Command.PIT.name())) {
-                                --tmpIndex;
-                            } else if (previousCommand.startsWith(Command.DEPLOY.name())) {
-                                shouldSkipThisPit = false;
-                                break;
-                            } else {
-                                shouldSkipThisPit = true;
-                                break;
-                            }
-                        }
-
-                        if (shouldSkipThisPit) {
-                            continue;
-                        }
-
-                        String nextCommand = commands.get((commandIndex + 1) % commands.size());
-                        //Based on Test cases, I guess below requirement is not valid
-//                        if (!(nextCommand.startsWith(Command.MOVE.name()) ||
-//                                nextCommand.startsWith(Command.LEFT.name()) ||
-//                                nextCommand.startsWith(Command.RIGHT.name()))) {
-//                            continue;
-//                        }
-
-
-                        inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
-                        inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
-
-                        if (this.xCoordinate == inputXCoordinate &&
-                                this.yCoordinate == inputYCoordinate) {
-                            outputs.add("ROBOT Detected: Ignored");
-                            continue;
-                        }
-                        pits.add(new Coordinate(inputXCoordinate, inputYCoordinate));
+                        boolean shouldSkipPit = pit(commands, commandIndex, outputs, commandArgsArray);
+                        if (shouldSkipPit) continue;
 
                         break;
                     case MOVE:
@@ -160,21 +104,24 @@ public class RobotSimulator {
                         break;
                     case LEFT:
                         if (!isActivated) continue;
+
                         directionIndex = (directionIndex + 3) % 4;
 
                         break;
                     case RIGHT:
                         if (!isActivated) continue;
+
                         directionIndex = (directionIndex + 1) % 4;
 
                         break;
                     case REPORT:
                         if (!isActivated) continue;
+
                         outputs.add(String.format("%s,%s,%s",
                                 this.xCoordinate, this.yCoordinate, this.DIRECTION_SEQUENCE[directionIndex].name()));
                         break;
                     default:
-                        System.err.println("Unrecognised command");
+                        System.err.println("Unrecognised command=" + mainCommand);
                 }
             }
         } catch (IOException e) {
@@ -183,6 +130,89 @@ public class RobotSimulator {
 
         return outputs;
         // throw new UnsupportedOperationException();
+    }
+
+    private boolean deploy(List<String> outputs, String[] commandArgsArray) {
+        int inputXCoordinate = this.xCoordinate, inputYCoordinate = this.yCoordinate;
+        Direction inputDirection = null;
+        boolean shouldSkipDeploy = false;
+
+        try {
+            if (commandArgsArray == null || commandArgsArray.length != 3) {
+                throw new IllegalArgumentException("Invalid command arguments");
+            }
+            inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
+            inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
+            inputDirection = Direction.valueOf(commandArgsArray[2]);
+        } catch (IllegalArgumentException e) {
+            shouldSkipDeploy = true;
+            return shouldSkipDeploy;
+        }
+
+        //Validations
+        if (isInvalidMove(outputs, inputXCoordinate, inputYCoordinate)) {
+            shouldSkipDeploy = true;
+            return shouldSkipDeploy;
+        }
+
+        //Commit the Command
+        this.xCoordinate = inputXCoordinate;
+        this.yCoordinate = inputYCoordinate;
+        this.directionIndex = Arrays.asList(DIRECTION_SEQUENCE).indexOf(inputDirection);
+        this.isActivated = true;
+
+        return shouldSkipDeploy;
+    }
+
+    private boolean pit(List<String> commands, int commandIndex,
+                        List<String> outputs, String[] commandArgsArray) {
+        int inputXCoordinate = this.xCoordinate, inputYCoordinate = this.yCoordinate;
+        Direction inputDirection = null;
+        boolean shouldSkipPit = false;
+
+        //Make sure this PIT follows a DEPLOY and allows only PIT in intermediate steps
+        boolean shouldSkipThisPit = false;
+        int tmpIndex = commandIndex;
+        String previousCommand = null;
+        while (tmpIndex >= 0){
+            previousCommand = commands.get((tmpIndex - 1) % commands.size());
+            if (previousCommand.startsWith(Command.PIT.name())) {
+                --tmpIndex;
+            } else if (previousCommand.startsWith(Command.DEPLOY.name())) {
+                break;
+            } else {
+                shouldSkipThisPit = true;
+                return shouldSkipThisPit;
+            }
+        }
+
+        String nextCommand = commands.get((commandIndex + 1) % commands.size());
+        //Based on Test cases, I guess below requirement is not valid
+//                        if (!(nextCommand.startsWith(Command.MOVE.name()) ||
+//                                nextCommand.startsWith(Command.LEFT.name()) ||
+//                                nextCommand.startsWith(Command.RIGHT.name()))) {
+//                            shouldSkipThisPit = true;
+//                            return shouldSkipThisPit;
+//                        }
+
+
+        try {
+            inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
+            inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
+        } catch (IllegalArgumentException e) {
+            shouldSkipThisPit = true;
+            return shouldSkipThisPit;
+        }
+
+        if (this.xCoordinate == inputXCoordinate &&
+                this.yCoordinate == inputYCoordinate) {
+            outputs.add("ROBOT Detected: Ignored");
+            shouldSkipThisPit = true;
+            return shouldSkipThisPit;
+        }
+
+        pits.add(new Coordinate(inputXCoordinate, inputYCoordinate));
+        return shouldSkipThisPit;
     }
 
     private void move(final List<String> outputs) {
