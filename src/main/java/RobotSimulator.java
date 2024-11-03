@@ -1,5 +1,9 @@
+import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
-import java.util.List;
+import java.io.InputStreamReader;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * The application is a simulation of a Rover Robot moving on a square zone to be explored, of
@@ -40,6 +44,21 @@ import java.util.List;
  * REPORT
  */
 public class RobotSimulator {
+    private final int BOARD_MAX_DIMENSION = 10;
+    private int[][] board;
+    private int xCoordinate, yCoordinate;
+    private Direction direction;
+    private boolean isActivated;
+    private Set<Coordinate> pits;
+
+    RobotSimulator() {
+        board = new int[BOARD_MAX_DIMENSION][BOARD_MAX_DIMENSION];
+        xCoordinate = -1;
+        yCoordinate = -1;
+        direction = null;
+        isActivated = false;
+        pits = new HashSet<>();
+    }
     /**
      * Should process the input and return the report lines as result.
      *
@@ -47,6 +66,101 @@ public class RobotSimulator {
      * @return the reported lines.
      */
     public List<String> process(InputStream input) {
-        throw new UnsupportedOperationException();
+        List<String> inputCommands;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(input))) {
+            List<String> commands =  reader.lines().collect(Collectors.toList()); // Process line
+            for(String command: commands) {
+                String[] commandTokens = command.split(" ");
+                Command mainCommand = Command.valueOf(commandTokens[0]);
+                String commandArgs = commandTokens[1];
+                String[] commandArgsArray = commandArgs.split(",");
+                int inputXCoordinate = -1, inputYCoordinate = -1;
+
+                switch(mainCommand) {
+                    case DEPLOY:
+                        inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
+                        inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
+                        Direction inputDirection = Direction.valueOf(commandArgsArray[2]);
+
+                        if (pits.contains(new Coordinate(inputXCoordinate, inputYCoordinate)) ||
+                        inputXCoordinate < 0 || inputXCoordinate >= BOARD_MAX_DIMENSION ||
+                        inputYCoordinate < 0 || inputYCoordinate >= BOARD_MAX_DIMENSION) {
+                            continue;
+                        } else {
+                            this.xCoordinate = inputXCoordinate;
+                            this.yCoordinate = inputYCoordinate;
+                            this.direction = inputDirection;
+                            this.isActivated = true;
+                        }
+
+                        break;
+                    case PIT:
+                        inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
+                        inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
+                        pits.add(new Coordinate(inputXCoordinate, inputYCoordinate));
+                        break;
+                    case MOVE:
+                        break;
+                    case LEFT:
+                        break;
+                    case RIGHT:
+                        break;
+                    case REPORT:
+                        break;
+                    default:
+                        System.err.println("Unrecognised command");
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        // throw new UnsupportedOperationException();
+    }
+}
+
+enum Command {
+    DEPLOY,
+    PIT,
+    MOVE,
+    RIGHT,
+    LEFT,
+    REPORT
+}
+
+enum Direction {
+    NORTH,
+    SOUTH,
+    EAST,
+    WEST;
+}
+
+class Coordinate {
+    private final int x;
+    private final int y;
+
+    Coordinate(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public int getX() {
+        return x;
+    }
+
+    public int getY() {
+        return y;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Coordinate that = (Coordinate) o;
+        return x == that.x && y == that.y;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(x, y);
     }
 }
