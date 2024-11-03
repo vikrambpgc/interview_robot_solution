@@ -45,17 +45,17 @@ import java.util.stream.Collectors;
  */
 public class RobotSimulator {
     private final int BOARD_MAX_DIMENSION = 10;
-    private int[][] board;
+    private final Direction[] DIRECTION_SEQUENCE =
+            {Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST};
+    private int directionIndex;
     private int xCoordinate, yCoordinate;
-    private Direction direction;
     private boolean isActivated;
-    private Set<Coordinate> pits;
+    private final Set<Coordinate> pits;
 
     RobotSimulator() {
-        board = new int[BOARD_MAX_DIMENSION][BOARD_MAX_DIMENSION];
         xCoordinate = -1;
         yCoordinate = -1;
-        direction = null;
+        directionIndex = 0;
         isActivated = false;
         pits = new HashSet<>();
     }
@@ -82,28 +82,30 @@ public class RobotSimulator {
                         inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
                         Direction inputDirection = Direction.valueOf(commandArgsArray[2]);
 
-                        if (pits.contains(new Coordinate(inputXCoordinate, inputYCoordinate)) ||
-                        inputXCoordinate < 0 || inputXCoordinate >= BOARD_MAX_DIMENSION ||
-                        inputYCoordinate < 0 || inputYCoordinate >= BOARD_MAX_DIMENSION) {
-                            continue;
-                        } else {
-                            this.xCoordinate = inputXCoordinate;
-                            this.yCoordinate = inputYCoordinate;
-                            this.direction = inputDirection;
-                            this.isActivated = true;
-                        }
+                        //Validations
+                        if (isInvalidMove(inputXCoordinate, inputYCoordinate)) continue;
+
+                        //Commit the Command
+                        this.xCoordinate = inputXCoordinate;
+                        this.yCoordinate = inputYCoordinate;
+                        this.directionIndex = Arrays.asList(DIRECTION_SEQUENCE).indexOf(inputDirection);
+                        this.isActivated = true;
 
                         break;
                     case PIT:
                         inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
                         inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
+
                         pits.add(new Coordinate(inputXCoordinate, inputYCoordinate));
                         break;
                     case MOVE:
-                        break;
+                        move();
+                        continue;
                     case LEFT:
+                        directionIndex = (directionIndex + 3) % 4;
                         break;
                     case RIGHT:
+                        directionIndex = (directionIndex + 1) % 4;
                         break;
                     case REPORT:
                         break;
@@ -115,6 +117,44 @@ public class RobotSimulator {
             throw new RuntimeException(e);
         }
         // throw new UnsupportedOperationException();
+    }
+
+    private void move() {
+        int inputXCoordinate = this.xCoordinate;
+        int inputYCoordinate = this.yCoordinate;
+        Direction currentDirection = DIRECTION_SEQUENCE[directionIndex];
+        switch (currentDirection) {
+            case NORTH:
+                inputYCoordinate++;
+                break;
+            case SOUTH:
+                inputYCoordinate--;
+                break;
+            case EAST:
+                inputXCoordinate++;
+                break;
+            case WEST:
+                inputXCoordinate--;
+                break;
+            default:
+                break;
+        }
+
+        if (isInvalidMove(inputXCoordinate, inputYCoordinate)) return;
+
+        //Commit the Command
+        this.xCoordinate = inputXCoordinate;
+        this.yCoordinate = inputYCoordinate;
+    }
+
+    private boolean isInvalidMove(int xCoordinate, int yCoordinate) {
+        if (pits.contains(new Coordinate(xCoordinate, yCoordinate)) ||
+                xCoordinate < 0 || xCoordinate >= BOARD_MAX_DIMENSION ||
+                yCoordinate < 0 || yCoordinate >= BOARD_MAX_DIMENSION) {
+            return true;
+        }
+
+        return false;
     }
 }
 
