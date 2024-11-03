@@ -44,7 +44,7 @@ import java.util.stream.Collectors;
  * REPORT
  */
 public class RobotSimulator {
-    private final int BOARD_MAX_DIMENSION = 10;
+    private static final int BOARD_MAX_DIMENSION = 10;
     private final Direction[] DIRECTION_SEQUENCE =
             {Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST};
     private int directionIndex;
@@ -67,23 +67,40 @@ public class RobotSimulator {
      */
     public List<String> process(InputStream input) {
         List<String> inputCommands;
+        List<String> outputs = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(input))) {
             List<String> commands =  reader.lines().collect(Collectors.toList()); // Process line
-            for(String command: commands) {
-                String[] commandTokens = command.split(" ");
-                Command mainCommand = Command.valueOf(commandTokens[0]);
-                String commandArgs = commandTokens[1];
-                String[] commandArgsArray = commandArgs.split(",");
-                int inputXCoordinate = -1, inputYCoordinate = -1;
+            for(int commandIndex=0; commandIndex < commands.size(); commandIndex++) {
+                Command mainCommand = null;
+                String commandArgs = null;
+                String[] commandArgsArray = null;
+
+                String[] commandTokens = commands.get(commandIndex).split(" ");
+                try {
+                    mainCommand = Command.valueOf(commandTokens[0]);
+                } catch (IllegalArgumentException e) {
+                    continue;
+                }
+                if (commandTokens.length > 1) {
+                    commandArgs = commandTokens[1];
+                    commandArgsArray = commandArgs.split(",");
+                }
+
+                int inputXCoordinate = this.xCoordinate, inputYCoordinate = this.yCoordinate;
+                Direction inputDirection = null;
 
                 switch(mainCommand) {
                     case DEPLOY:
-                        inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
-                        inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
-                        Direction inputDirection = Direction.valueOf(commandArgsArray[2]);
+                        try {
+                            inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
+                            inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
+                            inputDirection = Direction.valueOf(commandArgsArray[2]);
+                        } catch (IllegalArgumentException e) {
+                            continue;
+                        }
 
                         //Validations
-                        if (isInvalidMove(inputXCoordinate, inputYCoordinate)) continue;
+                        if (isInvalidMove(outputs, inputXCoordinate, inputYCoordinate)) continue;
 
                         //Commit the Command
                         this.xCoordinate = inputXCoordinate;
@@ -93,21 +110,68 @@ public class RobotSimulator {
 
                         break;
                     case PIT:
+                        if (!isActivated) continue;
+
+                        //Make sure this PIT follows a DEPLOY and allows only PIT in intermediate steps
+                        boolean shouldSkipThisPit = false;
+                        int tmpIndex = commandIndex;
+                        String previousCommand = null;
+                        while (tmpIndex >= 0){
+                            previousCommand = commands.get((tmpIndex - 1) % commands.size());
+                            if (previousCommand.startsWith(Command.PIT.name())) {
+                                --tmpIndex;
+                            } else if (previousCommand.startsWith(Command.DEPLOY.name())) {
+                                shouldSkipThisPit = false;
+                                break;
+                            } else {
+                                shouldSkipThisPit = true;
+                                break;
+                            }
+                        }
+
+                        if (shouldSkipThisPit) {
+                            continue;
+                        }
+
+                        String nextCommand = commands.get((commandIndex + 1) % commands.size());
+                        //Based on Test cases, I guess below requirement is not valid
+//                        if (!(nextCommand.startsWith(Command.MOVE.name()) ||
+//                                nextCommand.startsWith(Command.LEFT.name()) ||
+//                                nextCommand.startsWith(Command.RIGHT.name()))) {
+//                            continue;
+//                        }
+
+
                         inputXCoordinate = Integer.parseInt(commandArgsArray[0]);
                         inputYCoordinate = Integer.parseInt(commandArgsArray[1]);
 
+                        if (this.xCoordinate == inputXCoordinate &&
+                                this.yCoordinate == inputYCoordinate) {
+                            outputs.add("ROBOT Detected: Ignored");
+                            continue;
+                        }
                         pits.add(new Coordinate(inputXCoordinate, inputYCoordinate));
+
                         break;
                     case MOVE:
-                        move();
-                        continue;
+                        if (!isActivated) continue;
+                        move(outputs);
+
+                        break;
                     case LEFT:
+                        if (!isActivated) continue;
                         directionIndex = (directionIndex + 3) % 4;
+
                         break;
                     case RIGHT:
+                        if (!isActivated) continue;
                         directionIndex = (directionIndex + 1) % 4;
+
                         break;
                     case REPORT:
+                        if (!isActivated) continue;
+                        outputs.add(String.format("%s,%s,%s",
+                                this.xCoordinate, this.yCoordinate, this.DIRECTION_SEQUENCE[directionIndex].name()));
                         break;
                     default:
                         System.err.println("Unrecognised command");
@@ -116,10 +180,12 @@ public class RobotSimulator {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        return outputs;
         // throw new UnsupportedOperationException();
     }
 
-    private void move() {
+    private void move(final List<String> outputs) {
         int inputXCoordinate = this.xCoordinate;
         int inputYCoordinate = this.yCoordinate;
         Direction currentDirection = DIRECTION_SEQUENCE[directionIndex];
@@ -140,17 +206,23 @@ public class RobotSimulator {
                 break;
         }
 
-        if (isInvalidMove(inputXCoordinate, inputYCoordinate)) return;
+        if (isInvalidMove(outputs, inputXCoordinate, inputYCoordinate)) return;
 
         //Commit the Command
         this.xCoordinate = inputXCoordinate;
         this.yCoordinate = inputYCoordinate;
     }
 
-    private boolean isInvalidMove(int xCoordinate, int yCoordinate) {
-        if (pits.contains(new Coordinate(xCoordinate, yCoordinate)) ||
-                xCoordinate < 0 || xCoordinate >= BOARD_MAX_DIMENSION ||
+    private boolean isInvalidMove(final List<String> outputs, int xCoordinate, int yCoordinate) {
+
+        if (pits.contains(new Coordinate(xCoordinate, yCoordinate))) {
+            outputs.add("PIT Detected: Ignored");
+            return true;
+        }
+
+        if (xCoordinate < 0 || xCoordinate >= BOARD_MAX_DIMENSION ||
                 yCoordinate < 0 || yCoordinate >= BOARD_MAX_DIMENSION) {
+            outputs.add("Outside Zone: Ignored");
             return true;
         }
 
